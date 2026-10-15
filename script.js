@@ -1,23 +1,42 @@
 // =============================================
 // ESTOQUE FÁCIL - JAVASCRIPT
-// Lógica de navegação, busca e cadastro
+// Lógica de navegação, busca, cadastro, edição e integração preparada com Supabase
 // =============================================
 
-// BANCO DE DADOS EM MEMÓRIA (DEMONSTRAÇÃO)
+// Dados em memória (fallback para quando Supabase não estiver configurado)
 let baseProdutos = [
-    { id: 1, codigo: 'SKU-001', rua: 'Rua A', prateleira: 'P1', foto: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=300&fit=crop', status: 'ativo' },
-    { id: 2, codigo: 'SKU-002', rua: 'Rua B', prateleira: 'P2', foto: 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=400&h=300&fit=crop', status: 'ativo' },
-    { id: 3, codigo: 'SKU-003', rua: 'Rua C', prateleira: 'P3', foto: 'https://images.unsplash.com/photo-1533139602282-d2e5a28e5f42?w=400&h=300&fit=crop', status: 'zerado' },
-    { id: 4, codigo: 'SKU-004', rua: 'Rua D', prateleira: 'P1', foto: 'https://images.unsplash.com/photo-1535628346881-dac1665014d5?w=400&h=300&fit=crop', status: 'ativo' }
+    { id: '1', code: 'SKU-001', rua: 'Rua A', prateleira: 'P1', photo: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=300&fit=crop', quantity: 10, observation: '', active: true },
+    { id: '2', code: 'SKU-002', rua: 'Rua B', prateleira: 'P2', photo: 'https://images.unsplash.com/photo-1526170375885-4d8ecf77b99f?w=400&h=300&fit=crop', quantity: 5, observation: '', active: true },
+    { id: '3', code: 'SKU-003', rua: 'Rua C', prateleira: 'P3', photo: 'https://images.unsplash.com/photo-1533139602282-d2e5a28e5f42?w=400&h=300&fit=crop', quantity: 0, observation: 'Aguardando', active: false }
 ];
 
-let proximoId = 5;
+let proximoId = 4;
 let produtoSelecionado = null;
+let produtoEditandoId = null;
+let supabaseClient = null;
+let supabaseConfigured = false;
+let storageBucket = 'product-photos';
 
-const seletores = {
+// Se a configuração estiver presente, inicializa o Supabase
+if (window.SUPABASE_CONFIG && window.SUPABASE_CONFIG.SUPABASE_URL && window.SUPABASE_CONFIG.SUPABASE_ANON_KEY) {
+    try {
+        supabaseClient = supabase.createClient(window.SUPABASE_CONFIG.SUPABASE_URL, window.SUPABASE_CONFIG.SUPABASE_ANON_KEY);
+        storageBucket = window.SUPABASE_CONFIG.STORAGE_BUCKET || storageBucket;
+        supabaseConfigured = true;
+        console.log('Supabase configurado:', window.SUPABASE_CONFIG.SUPABASE_URL);
+    } catch (err) {
+        console.warn('Erro ao inicializar Supabase:', err);
+    }
+} else {
+    console.log('Supabase não configurado. Usando armazenamento local temporário.');
+}
+
+// Seletores
+const sel = {
     navBtns: document.querySelectorAll('.nav-btn'),
     tabContents: document.querySelectorAll('.tab-content'),
 
+    // Buscar
     codigoPesquisa: document.getElementById('codigoPesquisa'),
     btnBuscar: document.getElementById('btnBuscar'),
     resultadoBusca: document.getElementById('resultadoBusca'),
@@ -27,267 +46,474 @@ const seletores = {
     ruaProduto: document.getElementById('ruaProduto'),
     prateleiraeProduto: document.getElementById('prateleiraeProduto'),
     situacaoProduto: document.getElementById('situacaoProduto'),
+    quantidadeProduto: document.getElementById('quantidadeProduto'),
+    observacaoProduto: document.getElementById('observacaoProduto'),
     btnMudarLocalizacao: document.getElementById('btnMudarLocalizacao'),
     btnZerarProduto: document.getElementById('btnZerarProduto'),
     btnReativar: document.getElementById('btnReativar'),
+    btnIrEditar: document.getElementById('btnIrEditar'),
 
+    // Adicionar
     formAdicionar: document.getElementById('formAdicionar'),
     codigoNovo: document.getElementById('codigoNovo'),
     ruaNova: document.getElementById('ruaNova'),
     prateleiraNova: document.getElementById('prateleiraNova'),
-    fotoNova: document.getElementById('fotoNova'),
-    erroCodigoDuplicado: document.getElementById('erroCodigoDuplicado'),
-    previewFoto: document.getElementById('previewFoto'),
+    fotoArquivoNovo: document.getElementById('fotoArquivoNovo'),
     imgPreview: document.getElementById('imgPreview'),
+    previewFoto: document.getElementById('previewFoto'),
+    btnTrocarFoto: document.getElementById('btnTrocarFoto'),
+    btnRemoverFoto: document.getElementById('btnRemoverFoto'),
+    quantidadeNova: document.getElementById('quantidadeNova'),
+    observacaoNova: document.getElementById('observacaoNova'),
+    erroCodigoDuplicado: document.getElementById('erroCodigoDuplicado'),
     sucessoAdicionar: document.getElementById('sucessoAdicionar'),
+    btnLimparAdicionar: document.getElementById('btnLimparAdicionar'),
 
-    filtroSituacao: document.getElementById('filtroSituacao'),
-    listaHistorico: document.getElementById('listaHistorico'),
-    historicoVazio: document.getElementById('historicoVazio'),
+    // Editar
+    codigoEditarBuscar: document.getElementById('codigoEditarBuscar'),
+    btnBuscarParaEditar: document.getElementById('btnBuscarParaEditar'),
+    formEditar: document.getElementById('formEditar'),
+    codigoEditar: document.getElementById('codigoEditar'),
+    fotoArquivoEditar: document.getElementById('fotoArquivoEditar'),
+    imgPreviewEditar: document.getElementById('imgPreviewEditar'),
+    previewFotoEditar: document.getElementById('previewFotoEditar'),
+    btnTrocarFotoEditar: document.getElementById('btnTrocarFotoEditar'),
+    btnRemoverFotoEditar: document.getElementById('btnRemoverFotoEditar'),
+    ruaEditar: document.getElementById('ruaEditar'),
+    prateleiraEditar: document.getElementById('prateleiraEditar'),
+    quantidadeEditar: document.getElementById('quantidadeEditar'),
+    observacaoEditar: document.getElementById('observacaoEditar'),
+    erroCodigoDuplicadoEditar: document.getElementById('erroCodigoDuplicadoEditar'),
+    mensagemEditar: document.getElementById('mensagemEditar'),
+    btnCancelarEditar: document.getElementById('btnCancelarEditar'),
 
+    // Modal
     modalMudarLocalizacao: document.getElementById('modalMudarLocalizacao'),
     formMudarLocalizacao: document.getElementById('formMudarLocalizacao'),
     ruaModal: document.getElementById('ruaModal'),
     prateleiraModal: document.getElementById('prateleiraModal'),
     fecharModal: document.getElementById('fecharModal'),
     cancelarModal: document.getElementById('cancelarModal'),
-    modalOverlay: document.getElementById('modalOverlay')
+    modalOverlay: document.getElementById('modalOverlay'),
+
+    // Zerados
+    listaZerados: document.getElementById('listaZerados'),
+    zeradosVazio: document.getElementById('zeradosVazio'),
+
+    // Histórico (lista geral)
+    filtroSituacao: document.getElementById('filtroSituacao'),
+    listaHistorico: document.getElementById('listaHistorico'),
+    historicoVazio: document.getElementById('historicoVazio')
 };
 
+// Navegação de abas
 function mostrarAba(idAba) {
-    seletores.navBtns.forEach(btn => btn.classList.remove('active'));
-    seletores.tabContents.forEach(tab => tab.classList.remove('active'));
-
+    sel.navBtns.forEach(btn => btn.classList.remove('active'));
+    sel.tabContents.forEach(tab => tab.classList.remove('active'));
     const btn = document.querySelector(`[data-tab="${idAba}"]`);
     const tab = document.getElementById(idAba);
     if (btn) btn.classList.add('active');
     if (tab) tab.classList.add('active');
 }
 
+sel.navBtns.forEach(btn => btn.addEventListener('click', function () {
+    const aba = this.getAttribute('data-tab');
+    mostrarAba(aba);
+    if (aba === 'historico') atualizarHistorico();
+    if (aba === 'zerados') carregarListaZerados();
+}));
+
+// Mensagens
 function ocultarMensagensResultado() {
-    if (seletores.resultadoBusca) seletores.resultadoBusca.classList.add('hidden');
-    if (seletores.naoEncontrado) seletores.naoEncontrado.classList.add('hidden');
+    if (sel.resultadoBusca) sel.resultadoBusca.classList.add('hidden');
+    if (sel.naoEncontrado) sel.naoEncontrado.classList.add('hidden');
 }
 
+// Modal localização
 function abrirModalLocalizacao(produto) {
     produtoSelecionado = produto;
-    seletores.ruaModal.value = produto.rua;
-    seletores.prateleiraModal.value = produto.prateleira;
-    seletores.modalMudarLocalizacao.classList.remove('hidden');
-    seletores.modalOverlay.classList.remove('hidden');
+    sel.ruaModal.value = produto.rua || '';
+    sel.prateleiraModal.value = produto.prateleira || '';
+    sel.modalMudarLocalizacao.classList.remove('hidden');
+    sel.modalOverlay.classList.remove('hidden');
 }
-
 function fecharModalLocalizacao() {
-    seletores.modalMudarLocalizacao.classList.add('hidden');
-    seletores.modalOverlay.classList.add('hidden');
-    seletores.formMudarLocalizacao.reset();
+    sel.modalMudarLocalizacao.classList.add('hidden');
+    sel.modalOverlay.classList.add('hidden');
+    sel.formMudarLocalizacao.reset();
     produtoSelecionado = null;
 }
+sel.fecharModal.addEventListener('click', fecharModalLocalizacao);
+sel.cancelarModal.addEventListener('click', fecharModalLocalizacao);
+sel.modalOverlay.addEventListener('click', fecharModalLocalizacao);
 
-function buscarProdutoPorCodigo(codigo) {
-    return baseProdutos.find(p => p.codigo.toLowerCase() === codigo.toLowerCase());
+// BUSCAR
+async function fetchProductByCode(code) {
+    if (supabaseConfigured) {
+        const { data, error } = await supabaseClient
+            .from('products')
+            .select('*')
+            .eq('code', code)
+            .limit(1);
+        if (error) throw error;
+        return data && data.length ? data[0] : null;
+    } else {
+        return baseProdutos.find(p => p.code.toLowerCase() === (code || '').toLowerCase()) || null;
+    }
 }
 
-function codigoJaExiste(codigo) {
-    return baseProdutos.some(p => p.codigo.toLowerCase() === codigo.toLowerCase());
+async function executarBusca() {
+    const codigo = sel.codigoPesquisa.value.trim();
+    if (!codigo) { alert('Digite um código para buscar.'); return; }
+    try {
+        const produto = await fetchProductByCode(codigo);
+        if (produto) {
+            produtoSelecionado = produto;
+            mostrarProdutoEncontrado(produto);
+        } else {
+            mostrarProdutoNaoEncontrado();
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Erro ao buscar produto. Veja o console.');
+    }
 }
+sel.btnBuscar.addEventListener('click', executarBusca);
+sel.codigoPesquisa.addEventListener('keypress', function (e) { if (e.key === 'Enter') executarBusca(); });
 
 function mostrarProdutoEncontrado(produto) {
-    seletores.imgProduto.src = produto.foto;
-    seletores.imgProduto.alt = `Produto ${produto.codigo}`;
-    seletores.codigoProduto.textContent = `Código: ${produto.codigo}`;
-    seletores.ruaProduto.textContent = produto.rua;
-    seletores.prateleiraeProduto.textContent = produto.prateleira;
+    sel.imgProduto.src = produto.photo || produto.photo_path || produto.photo_url || '';
+    sel.imgProduto.alt = `Produto ${produto.code}`;
+    sel.codigoProduto.textContent = `Código: ${produto.code}`;
+    sel.ruaProduto.textContent = produto.rua || '-';
+    sel.prateleiraeProduto.textContent = produto.prateleira || '-';
+    sel.quantidadeProduto.textContent = (produto.quantity != null) ? produto.quantity : '-';
+    sel.observacaoProduto.textContent = produto.observation || '-';
 
-    if (produto.status === 'zerado') {
-        seletores.situacaoProduto.textContent = 'Zerado';
-        seletores.situacaoProduto.className = 'info-valor status-zerado';
-        seletores.btnZerarProduto.classList.add('hidden');
-        seletores.btnReativar.classList.remove('hidden');
+    if (produto.active === false || produto.status === 'zerado') {
+        sel.situacaoProduto.textContent = 'Zerado';
+        sel.situacaoProduto.className = 'info-valor status-zerado';
+        sel.btnZerarProduto.classList.add('hidden');
+        sel.btnReativar.classList.remove('hidden');
     } else {
-        seletores.situacaoProduto.textContent = 'Ativo';
-        seletores.situacaoProduto.className = 'info-valor status-ativo';
-        seletores.btnZerarProduto.classList.remove('hidden');
-        seletores.btnReativar.classList.add('hidden');
+        sel.situacaoProduto.textContent = 'Ativo';
+        sel.situacaoProduto.className = 'info-valor status-ativo';
+        sel.btnZerarProduto.classList.remove('hidden');
+        sel.btnReativar.classList.add('hidden');
     }
 
     ocultarMensagensResultado();
-    seletores.resultadoBusca.classList.remove('hidden');
+    sel.resultadoBusca.classList.remove('hidden');
 }
 
 function mostrarProdutoNaoEncontrado() {
     ocultarMensagensResultado();
-    seletores.naoEncontrado.classList.remove('hidden');
+    sel.naoEncontrado.classList.remove('hidden');
 }
 
-function executarBusca() {
-    const codigo = seletores.codigoPesquisa.value.trim();
-    if (!codigo) {
-        alert('Digite um código para buscar.');
-        return;
-    }
+// ADICIONAR
+function codigoJaExisteLocal(codigo) {
+    return baseProdutos.some(p => p.code.toLowerCase() === codigo.toLowerCase());
+}
 
-    const produto = buscarProdutoPorCodigo(codigo);
-    if (produto) {
-        produtoSelecionado = produto;
-        mostrarProdutoEncontrado(produto);
+async function codigoJaExisteRemoto(codigo) {
+    if (!supabaseConfigured) return false;
+    const { data, error } = await supabaseClient.from('products').select('id').eq('code', codigo).limit(1);
+    if (error) throw error;
+    return data && data.length > 0;
+}
+
+function resetPreviewAdicionar() {
+    sel.previewFoto.classList.add('hidden');
+    sel.imgPreview.src = '';
+    sel.fotoArquivoNovo.value = null;
+}
+
+sel.fotoArquivoNovo.addEventListener('change', function () {
+    const file = this.files && this.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            sel.imgPreview.src = e.target.result;
+            sel.previewFoto.classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
     } else {
-        mostrarProdutoNaoEncontrado();
+        resetPreviewAdicionar();
     }
+});
+sel.btnRemoverFoto.addEventListener('click', resetPreviewAdicionar);
+sel.btnTrocarFoto.addEventListener('click', () => sel.fotoArquivoNovo.click());
+
+async function uploadImageFile(file, destPath) {
+    if (!supabaseConfigured) throw new Error('Supabase não configurado');
+    const { data, error } = await supabaseClient.storage.from(storageBucket).upload(destPath, file, { cacheControl: '3600', upsert: false });
+    if (error) throw error;
+    // obter URL pública (dependendo se bucket for público)
+    const { data: urlData } = supabaseClient.storage.from(storageBucket).getPublicUrl(destPath);
+    return urlData && urlData.publicURL ? urlData.publicURL : null;
 }
 
-seletores.btnBuscar.addEventListener('click', executarBusca);
-seletores.codigoPesquisa.addEventListener('keypress', function (e) {
-    if (e.key === 'Enter') executarBusca();
-});
+async function adicionarProduto(event) {
+    event.preventDefault();
+    const codigo = sel.codigoNovo.value.trim();
+    const rua = sel.ruaNova.value.trim();
+    const prateleira = sel.prateleiraNova.value.trim();
+    const quantidade = parseInt(sel.quantidadeNova.value, 10) || 0;
+    const observacao = sel.observacaoNova.value.trim();
+    const file = sel.fotoArquivoNovo.files && sel.fotoArquivoNovo.files[0];
 
-seletores.formAdicionar.addEventListener('submit', function (e) {
-    e.preventDefault();
+    if (!codigo || !rua || !prateleira) { alert('Preencha todos os campos obrigatórios.'); return; }
+    if (quantidade < 0) { alert('Quantidade não pode ser negativa.'); return; }
 
-    const codigo = seletores.codigoNovo.value.trim();
-    const rua = seletores.ruaNova.value.trim();
-    const prateleira = seletores.prateleiraNova.value.trim();
-    const fotoUrl = seletores.fotoNova.value.trim();
+    try {
+        if (supabaseConfigured) {
+            const exists = await codigoJaExisteRemoto(codigo);
+            if (exists) { sel.erroCodigoDuplicado.classList.remove('hidden'); return; }
+            sel.erroCodigoDuplicado.classList.add('hidden');
 
-    if (!codigo || !rua || !prateleira) {
-        alert('Preencha todos os campos obrigatórios.');
-        return;
+            // criar registro primeiro para ter um id
+            const { data: insertData, error: insertError } = await supabaseClient.from('products').insert([{ code: codigo, rua, prateleira, quantity: quantidade, observation: observacao }]).select().single();
+            if (insertError) throw insertError;
+            const created = insertData;
+            let publicUrl = null;
+            if (file) {
+                const ext = file.name.split('.').pop();
+                const path = `${created.id}.${ext}`;
+                await uploadImageFile(file, path);
+                // salvar path no registro
+                const photo_path = path;
+                const { error: updErr } = await supabaseClient.from('products').update({ photo_path }).eq('id', created.id);
+                if (updErr) throw updErr;
+                // tentar obter public url
+                const { data: urlData } = supabaseClient.storage.from(storageBucket).getPublicUrl(path);
+                publicUrl = urlData && urlData.publicURL ? urlData.publicURL : null;
+            }
+            sel.formAdicionar.reset();
+            resetPreviewAdicionar();
+            sel.sucessoAdicionar.classList.remove('hidden');
+            setTimeout(() => sel.sucessoAdicionar.classList.add('hidden'), 2500);
+        } else {
+            if (codigoJaExisteLocal(codigo)) { sel.erroCodigoDuplicado.classList.remove('hidden'); return; }
+            sel.erroCodigoDuplicado.classList.add('hidden');
+            const novo = { id: String(proximoId++), code: codigo, rua, prateleira, photo: sel.imgPreview.src || '', quantity, observation: observacao, active: true };
+            baseProdutos.push(novo);
+            sel.formAdicionar.reset();
+            resetPreviewAdicionar();
+            sel.sucessoAdicionar.classList.remove('hidden');
+            setTimeout(() => sel.sucessoAdicionar.classList.add('hidden'), 2500);
+            atualizarHistorico();
+        }
+    } catch (err) {
+        console.error('Erro ao adicionar:', err);
+        alert('Erro ao adicionar produto. Veja o console.');
     }
+}
+sel.formAdicionar.addEventListener('submit', adicionarProduto);
+sel.btnLimparAdicionar.addEventListener('click', resetPreviewAdicionar);
 
-    if (codigoJaExiste(codigo)) {
-        seletores.erroCodigoDuplicado.classList.remove('hidden');
-        return;
-    }
-
-    seletores.erroCodigoDuplicado.classList.add('hidden');
-
-    const novoProduto = {
-        id: proximoId++,
-        codigo,
-        rua,
-        prateleira,
-        foto: fotoUrl || 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=300&fit=crop',
-        status: 'ativo'
-    };
-
-    baseProdutos.push(novoProduto);
-    seletores.formAdicionar.reset();
-    seletores.previewFoto.classList.add('hidden');
-    seletores.imgPreview.src = '';
-    seletores.sucessoAdicionar.classList.remove('hidden');
-    setTimeout(() => seletores.sucessoAdicionar.classList.add('hidden'), 2500);
-    atualizarHistorico();
-});
-
-seletores.fotoNova.addEventListener('change', function () {
-    const url = this.value.trim();
-    if (url) {
-        seletores.imgPreview.src = url;
-        seletores.previewFoto.classList.remove('hidden');
+// EDITAR
+async function fetchProductByCodeAnyState(code) {
+    if (supabaseConfigured) {
+        const { data, error } = await supabaseClient.from('products').select('*').eq('code', code).limit(1);
+        if (error) throw error;
+        return data && data.length ? data[0] : null;
     } else {
-        seletores.previewFoto.classList.add('hidden');
-    }
-});
-
-seletores.btnMudarLocalizacao.addEventListener('click', function () {
-    if (!produtoSelecionado) return;
-    abrirModalLocalizacao(produtoSelecionado);
-});
-
-seletores.formMudarLocalizacao.addEventListener('submit', function (e) {
-    e.preventDefault();
-
-    if (!produtoSelecionado) return;
-
-    const novaRua = seletores.ruaModal.value.trim();
-    const novaPrateleira = seletores.prateleiraModal.value.trim();
-
-    if (!novaRua || !novaPrateleira) {
-        alert('Preencha todos os campos.');
-        return;
-    }
-
-    produtoSelecionado.rua = novaRua;
-    produtoSelecionado.prateleira = novaPrateleira;
-    mostrarProdutoEncontrado(produtoSelecionado);
-    fecharModalLocalizacao();
-    atualizarHistorico();
-});
-
-seletores.fecharModal.addEventListener('click', fecharModalLocalizacao);
-seletores.cancelarModal.addEventListener('click', fecharModalLocalizacao);
-seletores.modalOverlay.addEventListener('click', fecharModalLocalizacao);
-
-seletores.btnZerarProduto.addEventListener('click', function () {
-    if (!produtoSelecionado) return;
-    const confirmado = confirm('Tem certeza que deseja zerar este produto?');
-    if (!confirmado) return;
-
-    produtoSelecionado.status = 'zerado';
-    mostrarProdutoEncontrado(produtoSelecionado);
-    atualizarHistorico();
-});
-
-seletores.btnReativar.addEventListener('click', function () {
-    if (!produtoSelecionado) return;
-    const confirmado = confirm('Reativar este produto?');
-    if (!confirmado) return;
-
-    produtoSelecionado.status = 'ativo';
-    mostrarProdutoEncontrado(produtoSelecionado);
-    atualizarHistorico();
-});
-
-function atualizarHistorico() {
-    const filtro = seletores.filtroSituacao.value;
-    let produtosFiltrados = baseProdutos;
-
-    if (filtro === 'ativo') {
-        produtosFiltrados = baseProdutos.filter(p => p.status === 'ativo');
-    } else if (filtro === 'zerado') {
-        produtosFiltrados = baseProdutos.filter(p => p.status === 'zerado');
-    }
-
-    if (produtosFiltrados.length === 0) {
-        seletores.listaHistorico.innerHTML = '';
-        seletores.historicoVazio.classList.remove('hidden');
-        return;
-    }
-
-    seletores.historicoVazio.classList.add('hidden');
-    seletores.listaHistorico.innerHTML = produtosFiltrados.map(produto => `
-        <div class="produto-item" onclick="selecionarProdutoHistorico('${produto.codigo}')">
-            <img src="${produto.foto}" alt="${produto.codigo}" class="produto-item-img">
-            <div class="produto-item-info">
-                <span class="produto-item-codigo">${produto.codigo}</span>
-                <span class="produto-item-localizacao">📍 ${produto.rua} • ${produto.prateleira}</span>
-                <span class="produto-item-status" style="color: ${produto.status === 'ativo' ? '#16a34a' : '#dc2626'}">
-                    ${produto.status === 'ativo' ? '✓ Ativo' : '✗ Zerado'}
-                </span>
-            </div>
-        </div>
-    `).join('');
-}
-
-seletores.filtroSituacao.addEventListener('change', atualizarHistorico);
-
-function selecionarProdutoHistorico(codigo) {
-    const produto = buscarProdutoPorCodigo(codigo);
-    if (produto) {
-        seletores.codigoPesquisa.value = codigo;
-        mostrarAba('buscar');
-        executarBusca();
+        return baseProdutos.find(p => p.code.toLowerCase() === (code || '').toLowerCase()) || null;
     }
 }
 
-seletores.navBtns.forEach(btn => {
-    btn.addEventListener('click', function () {
-        const aba = this.getAttribute('data-tab');
-        mostrarAba(aba);
-        if (aba === 'historico') atualizarHistorico();
-    });
+sel.btnBuscarParaEditar.addEventListener('click', async function () {
+    const codigo = sel.codigoEditarBuscar.value.trim();
+    if (!codigo) { alert('Digite um código para buscar.'); return; }
+    try {
+        const produto = await fetchProductByCodeAnyState(codigo);
+        if (!produto) { alert('Produto não encontrado.'); return; }
+        // preencher form
+        produtoEditandoId = produto.id;
+        sel.formEditar.classList.remove('hidden');
+        sel.codigoEditar.value = produto.code || '';
+        sel.ruaEditar.value = produto.rua || '';
+        sel.prateleiraEditar.value = produto.prateleira || '';
+        sel.quantidadeEditar.value = produto.quantity != null ? produto.quantity : 0;
+        sel.observacaoEditar.value = produto.observation || '';
+        // preview foto
+        const fotoUrl = produto.photo || produto.photo_path || '';
+        if (fotoUrl) {
+            sel.imgPreviewEditar.src = fotoUrl;
+            sel.previewFotoEditar.classList.remove('hidden');
+        } else {
+            sel.previewFotoEditar.classList.add('hidden');
+        }
+    } catch (err) {
+        console.error(err);
+        alert('Erro ao buscar produto para editar.');
+    }
 });
 
+sel.fotoArquivoEditar.addEventListener('change', function () {
+    const file = this.files && this.files[0];
+    if (file) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            sel.imgPreviewEditar.src = e.target.result;
+            sel.previewFotoEditar.classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+    }
+});
+sel.btnRemoverFotoEditar.addEventListener('click', function () {
+    sel.fotoArquivoEditar.value = null;
+    sel.imgPreviewEditar.src = '';
+    sel.previewFotoEditar.classList.add('hidden');
+});
+sel.btnTrocarFotoEditar.addEventListener('click', function () { sel.fotoArquivoEditar.click(); });
+
+async function codigoExisteOutroRemoto(codigo, id) {
+    if (!supabaseConfigured) return false;
+    const { data, error } = await supabaseClient.from('products').select('id').eq('code', codigo).limit(1);
+    if (error) throw error;
+    return data && data.length && data[0].id !== id;
+}
+
+async function salvarEdicao(event) {
+    event.preventDefault();
+    if (!produtoEditandoId) { alert('Nenhum produto selecionado para edição.'); return; }
+    const novoCodigo = sel.codigoEditar.value.trim();
+    const rua = sel.ruaEditar.value.trim();
+    const prateleira = sel.prateleiraEditar.value.trim();
+    const quantidade = parseInt(sel.quantidadeEditar.value, 10) || 0;
+    const observacao = sel.observacaoEditar.value.trim();
+    const file = sel.fotoArquivoEditar.files && sel.fotoArquivoEditar.files[0];
+
+    if (!novoCodigo || !rua || !prateleira) { alert('Preencha todos os campos obrigatórios.'); return; }
+    if (quantidade < 0) { alert('Quantidade não pode ser negativa.'); return; }
+
+    try {
+        if (supabaseConfigured) {
+            const existsOther = await codigoExisteOutroRemoto(novoCodigo, produtoEditandoId);
+            if (existsOther) { sel.erroCodigoDuplicadoEditar.classList.remove('hidden'); return; }
+            sel.erroCodigoDuplicadoEditar.classList.add('hidden');
+
+            // atualizar campos
+            const updates = { code: novoCodigo, rua, prateleira, quantity: quantidade, observation: observacao, updated_at: new Date().toISOString() };
+            if (file) {
+                const ext = file.name.split('.').pop();
+                const path = `${produtoEditandoId}.${ext}`;
+                await uploadImageFile(file, path);
+                updates.photo_path = path;
+            }
+            const { error: updErr } = await supabaseClient.from('products').update(updates).eq('id', produtoEditandoId);
+            if (updErr) throw updErr;
+            sel.mensagemEditar.classList.remove('hidden');
+            setTimeout(() => sel.mensagemEditar.classList.add('hidden'), 2500);
+        } else {
+            // local
+            const existente = baseProdutos.find(p => p.id === produtoEditandoId);
+            if (!existente) { alert('Produto não encontrado localmente.'); return; }
+            // checar se novoCodigo pertence a outro
+            if (baseProdutos.some(p => p.code.toLowerCase() === novoCodigo.toLowerCase() && p.id !== produtoEditandoId)) { sel.erroCodigoDuplicadoEditar.classList.remove('hidden'); return; }
+            sel.erroCodigoDuplicadoEditar.classList.add('hidden');
+            existente.code = novoCodigo;
+            existente.rua = rua;
+            existente.prateleira = prateleira;
+            existente.quantity = quantidade;
+            existente.observation = observacao;
+            if (sel.imgPreviewEditar.src) existente.photo = sel.imgPreviewEditar.src;
+            sel.mensagemEditar.classList.remove('hidden');
+            setTimeout(() => sel.mensagemEditar.classList.add('hidden'), 2500);
+            atualizarHistorico();
+        }
+    } catch (err) {
+        console.error('Erro ao salvar edição:', err);
+        alert('Erro ao salvar alterações. Veja o console.');
+    }
+}
+sel.formEditar.addEventListener('submit', salvarEdicao);
+sel.btnCancelarEditar.addEventListener('click', function () { sel.formEditar.classList.add('hidden'); produtoEditandoId = null; });
+sel.btnIrEditar.addEventListener('click', function () { if (!produtoSelecionado) return; mostrarAba('editar'); sel.codigoEditarBuscar.value = produtoSelecionado.code; sel.btnBuscarParaEditar.click(); });
+
+// ZERAR / REATIVAR
+async function zerarProdutoCodigo(code) {
+    if (supabaseConfigured) {
+        const { data, error } = await supabaseClient.from('products').select('id').eq('code', code).limit(1);
+        if (error) throw error;
+        if (!data || !data.length) return;
+        const id = data[0].id;
+        const { error: e } = await supabaseClient.from('products').update({ active: false }).eq('id', id);
+        if (e) throw e;
+    } else {
+        const p = baseProdutos.find(x => x.code.toLowerCase() === code.toLowerCase()); if (p) p.active = false;
+    }
+}
+
+async function reativarProdutoId(id) {
+    if (supabaseConfigured) {
+        const { error } = await supabaseClient.from('products').update({ active: true }).eq('id', id);
+        if (error) throw error;
+    } else {
+        const p = baseProdutos.find(x => x.id === id); if (p) p.active = true;
+    }
+}
+
+sel.btnZerarProduto.addEventListener('click', async function () {
+    if (!produtoSelecionado) return; const confirmado = confirm('Tem certeza que deseja zerar este produto?'); if (!confirmado) return;
+    try { await zerarProdutoCodigo(produtoSelecionado.code); produtoSelecionado.active = false; mostrarProdutoEncontrado(produtoSelecionado); atualizarHistorico(); } catch (err) { console.error(err); alert('Erro ao zerar produto.'); }
+});
+sel.btnReativar.addEventListener('click', async function () { if (!produtoSelecionado) return; const confirmado = confirm('Reativar este produto?'); if (!confirmado) return; try { await reativarProdutoId(produtoSelecionado.id); produtoSelecionado.active = true; mostrarProdutoEncontrado(produtoSelecionado); atualizarHistorico(); } catch (err) { console.error(err); alert('Erro ao reativar produto.'); } });
+
+// Listar zerados
+async function carregarListaZerados() {
+    try {
+        let produtos = [];
+        if (supabaseConfigured) {
+            const { data, error } = await supabaseClient.from('products').select('*').eq('active', false).order('updated_at', { ascending: false });
+            if (error) throw error; produtos = data || [];
+        } else {
+            produtos = baseProdutos.filter(p => p.active === false);
+        }
+        if (!produtos || produtos.length === 0) { sel.listaZerados.innerHTML = ''; sel.zeradosVazio.classList.remove('hidden'); return; }
+        sel.zeradosVazio.classList.add('hidden');
+        sel.listaZerados.innerHTML = produtos.map(p => `\n            <div class="produto-item">\n                <img src="${p.photo || p.photo_path || ''}" alt="${p.code}" class="produto-item-img">\n                <div class="produto-item-info">\n                    <span class="produto-item-codigo">${p.code}</span>\n                    <span class="produto-item-localizacao">📍 ${p.rua || '-'} • ${p.prateleira || '-'}</span>\n                </div>\n                <div style=\"display:flex;flex-direction:column;gap:8px\">\n                    <button class=\"btn btn-success\" onclick=\"window.__reativarProduto('${p.id}')\">Reativar</button>\n                </div>\n            </div>\n        `).join('');
+        // expor função global para o onclick
+        window.__reativarProduto = async function (id) { if (!confirm('Reativar este produto?')) return; try { await reativarProdutoId(id); carregarListaZerados(); atualizarHistorico(); alert('Produto reativado.'); } catch (err) { console.error(err); alert('Erro ao reativar.'); } };
+    } catch (err) {
+        console.error('Erro ao carregar zerados:', err);
+        alert('Erro ao carregar produtos zerados. Veja o console.');
+    }
+}
+
+// Histórico / lista geral (usado antes era "historico")
+async function atualizarHistorico() {
+    try {
+        let produtos = [];
+        if (supabaseConfigured) {
+            const { data, error } = await supabaseClient.from('products').select('*').order('created_at', { ascending: false });
+            if (error) throw error; produtos = data || [];
+        } else {
+            produtos = baseProdutos.slice().reverse();
+        }
+        const filtro = sel.filtroSituacao ? sel.filtroSituacao.value : 'todos';
+        if (filtro === 'ativo') produtos = produtos.filter(p => p.active === true);
+        if (filtro === 'zerado') produtos = produtos.filter(p => p.active === false);
+        if (!produtos || produtos.length === 0) { if (sel.listaHistorico) sel.listaHistorico.innerHTML = ''; if (sel.historicoVazio) sel.historicoVazio.classList.remove('hidden'); return; }
+        if (sel.historicoVazio) sel.historicoVazio.classList.add('hidden');
+        if (sel.listaHistorico) sel.listaHistorico.innerHTML = produtos.map(produto => `\n            <div class=\"produto-item\" onclick=\"window.__selecionarProdutoHistorico('${produto.code}')\">\n                <img src=\"${produto.photo || produto.photo_path || ''}\" alt=\"${produto.code}\" class=\"produto-item-img\">\n                <div class=\"produto-item-info\">\n                    <span class=\"produto-item-codigo\">${produto.code}</span>\n                    <span class=\"produto-item-localizacao\">📍 ${produto.rua || '-'} • ${produto.prateleira || '-'}</span>\n                    <span class=\"produto-item-status\" style=\"color: ${produto.active ? '#16a34a' : '#dc2626'}\">${produto.active ? '✓ Ativo' : '✗ Zerado'}</span>\n                </div>\n            </div>\n        `).join('');
+        window.__selecionarProdutoHistorico = function (code) { if (sel.codigoPesquisa) sel.codigoPesquisa.value = code; mostrarAba('buscar'); executarBusca(); };
+    } catch (err) {
+        console.error('Erro ao atualizar histórico:', err);
+    }
+}
+if (sel.filtroSituacao) sel.filtroSituacao.addEventListener('change', atualizarHistorico);
+
+// Inicialização
 window.addEventListener('load', function () {
     atualizarHistorico();
 });
+
+// Test helpers: obter URL pública se photo_path
+async function getPublicUrlFromPath(path) {
+    if (!supabaseConfigured) return null;
+    const { data } = supabaseClient.storage.from(storageBucket).getPublicUrl(path);
+    return data && data.publicURL ? data.publicURL : null;
+}
