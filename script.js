@@ -100,10 +100,10 @@ const sel = {
     listaZerados: document.getElementById('listaZerados'),
     zeradosVazio: document.getElementById('zeradosVazio'),
 
-    // Histórico (lista geral)
+    // Produtos (antes 'historico')
     filtroSituacao: document.getElementById('filtroSituacao'),
-    listaHistorico: document.getElementById('listaHistorico'),
-    historicoVazio: document.getElementById('historicoVazio')
+    listaProdutos: document.getElementById('listaProdutos'),
+    produtosVazio: document.getElementById('produtosVazio')
 };
 
 // Navegação de abas
@@ -119,7 +119,7 @@ function mostrarAba(idAba) {
 sel.navBtns.forEach(btn => btn.addEventListener('click', function () {
     const aba = this.getAttribute('data-tab');
     mostrarAba(aba);
-    if (aba === 'historico') atualizarHistorico();
+    if (aba === 'produtos') atualizarHistorico();
     if (aba === 'zerados') carregarListaZerados();
 }));
 
@@ -483,7 +483,7 @@ async function carregarListaZerados() {
     }
 }
 
-// Histórico / lista geral (usado antes era "historico")
+// Histórico / lista geral (agora Produtos)
 async function atualizarHistorico() {
     try {
         let produtos = [];
@@ -496,10 +496,10 @@ async function atualizarHistorico() {
         const filtro = sel.filtroSituacao ? sel.filtroSituacao.value : 'todos';
         if (filtro === 'ativo') produtos = produtos.filter(p => p.active === true);
         if (filtro === 'zerado') produtos = produtos.filter(p => p.active === false);
-        if (!produtos || produtos.length === 0) { if (sel.listaHistorico) sel.listaHistorico.innerHTML = ''; if (sel.historicoVazio) sel.historicoVazio.classList.remove('hidden'); return; }
-        if (sel.historicoVazio) sel.historicoVazio.classList.add('hidden');
-        if (sel.listaHistorico) sel.listaHistorico.innerHTML = produtos.map(produto => `\n            <div class=\"produto-item\" onclick=\"window.__selecionarProdutoHistorico('${produto.code}')\">\n                <img src=\"${produto.photo || produto.photo_path || ''}\" alt=\"${produto.code}\" class=\"produto-item-img\">\n                <div class=\"produto-item-info\">\n                    <span class=\"produto-item-codigo\">${produto.code}</span>\n                    <span class=\"produto-item-localizacao\">📍 ${produto.rua || '-'} • ${produto.prateleira || '-'}</span>\n                    <span class=\"produto-item-status\" style=\"color: ${produto.active ? '#16a34a' : '#dc2626'}\">${produto.active ? '✓ Ativo' : '✗ Zerado'}</span>\n                </div>\n            </div>\n        `).join('');
-        window.__selecionarProdutoHistorico = function (code) { if (sel.codigoPesquisa) sel.codigoPesquisa.value = code; mostrarAba('buscar'); executarBusca(); };
+        if (!produtos || produtos.length === 0) { if (sel.listaProdutos) sel.listaProdutos.innerHTML = ''; if (sel.produtosVazio) sel.produtosVazio.classList.remove('hidden'); return; }
+        if (sel.produtosVazio) sel.produtosVazio.classList.add('hidden');
+        if (sel.listaProdutos) sel.listaProdutos.innerHTML = produtos.map(produto => `\n            <div class=\"produto-item\" onclick=\"window.__selecionarProdutoProdutos('${produto.code}')\">\n                <img src=\"${produto.photo || produto.photo_path || ''}\" alt=\"${produto.code}\" class=\"produto-item-img\">\n                <div class=\"produto-item-info\">\n                    <span class=\"produto-item-codigo\">${produto.code}</span>\n                    <span class=\"produto-item-localizacao\">📍 ${produto.rua || '-'} • ${produto.prateleira || '-'}</span>\n                    <span class=\"produto-item-status\" style=\"color: ${produto.active ? '#16a34a' : '#dc2626'}\">${produto.active ? '✓ Ativo' : '✗ Zerado'}</span>\n                </div>\n            </div>\n        `).join('');
+        window.__selecionarProdutoProdutos = function (code) { if (sel.codigoPesquisa) sel.codigoPesquisa.value = code; mostrarAba('buscar'); executarBusca(); };
     } catch (err) {
         console.error('Erro ao atualizar histórico:', err);
     }
